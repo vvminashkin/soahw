@@ -1,0 +1,101 @@
+@startuml er_diagram
+entity "User" as user {
+  * user_id : UUID
+  --
+  username : String
+  password_hash : String
+  email : String
+  location : String
+  created_at : DateTime
+  last_login : DateTime
+}
+
+entity "UserRelationship" as userRelationship {
+  * relationship_id : UUID
+  --
+  user_id_1 : UUID
+  user_id_2 : UUID
+  relationship_type : String
+  created_at : DateTime
+}
+entity "Session" as session {
+  * session_id : UUID
+  --
+  user_id : UUID
+  token : String
+  created_at : DateTime
+  expires_at : DateTime
+  device_info : String
+}
+
+entity "Post" as post {
+  * post_id : UUID
+  --
+  user_id : UUID
+  content : Text
+  created_at : DateTime
+  updated_at : DateTime
+  title : String
+  status : String
+}
+
+entity "Comment" as comment {
+  * comment_id : UUID
+  --
+  post_id : UUID
+  user_id : UUID
+  parent_comment_id : UUID
+  content : Text
+  created_at : DateTime
+  updated_at : DateTime
+}
+
+entity "Like" as like {
+  * like_id : UUID
+  --
+  user_id : UUID
+  post_id : UUID
+  created_at : DateTime
+}
+
+entity "PostStatistics" as postStats {
+  * post_stats_id : UUID
+  --
+  post_id : UUID
+  views_count : Int
+  comments_count : Int
+  likes_count : Int
+  last_updated : DateTime
+}
+
+entity "View" as view {
+  * view_id : UUID
+  --
+  post_id : UUID
+  user_id : UUID
+  user_location : String
+  viewed_at : DateTime
+}
+
+entity "UserStatistics" as userStats {
+  * user_stats_id : UUID
+  --
+  user_id : UUID
+  posts_count : Int
+  comments_count : Int
+  likes_given : Int
+  last_activity : DateTime
+}
+
+user ||--o{ userRelationship : "interacts with"
+user ||--o{ session : "has"
+user ||--o{ post : "creates"
+user ||--o{ comment : "writes"
+user ||--o{ like : "likes"
+post ||--o{ comment : "has"
+post -- postStats : "has statistics"
+comment ||--o{ comment : "replies to (parent_comment_id)"
+post ||--o{ like : "receives"
+postStats ||--o{ view : "tracks"
+userStats ||--o{ view : "tracks"
+@enduml

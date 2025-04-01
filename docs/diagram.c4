@@ -1,0 +1,97 @@
+specification {
+    element person {
+        style {
+            shape person
+            color green
+        }
+    }
+    element softwareSystem
+    element container
+    element component
+}
+
+model {
+  user = person "Пользователь" "Пользователь"
+
+  socialNetwork = softwareSystem "Социальная сеть" {
+    apiGateway = container "API Gateway" {
+      description "Маршрутизация запросов и предоставление REST API для UI"
+      technology "Go"
+    }
+
+    userService = container "User Service" {
+      description "Управление пользователями и аутентификация"
+      technology "Go"
+    }
+
+    statisticsService = container "Statistics Service" {
+      description "Управление задачами и списками"
+      technology "Go"
+    }
+
+    analyticsService = container "Analytics Service" {
+      description "Сбор и анализ статистики лайков, просмотров и комментариев"
+      technology "Go"
+    }
+
+    postService = container "Post and Comments Service" {
+      description "Управление постами и комментариями"
+      technology "Go"
+    }
+
+    postgresUserDb = container "PostgreSQL User DB" {
+        description "Хранение данных пользователей"
+        technology "Database"
+        style {
+            color red
+            shape cylinder
+        }
+    }
+
+    clickhouseStatsDb = container "ClickHouse Stats DB" {
+        description "Хранение статистических данных"
+        technology "Database"
+        style {
+            color red
+            shape cylinder
+        }
+    }
+
+    postgresPostDb = container "Postgres Post DB" {
+        description "Хранение данных постов и комментариев"
+        technology "Database"
+        style {
+            color red
+            shape cylinder
+        }
+    }
+
+
+    kafka = container "Kafka" {
+      description "Обмен событиями между сервисами"
+      technology "Message Broker"
+      style {
+        color amber
+        shape queue
+      }
+    }
+  }
+
+    user -> socialNetwork.apiGateway "Использует" "HTTPS"
+    socialNetwork.apiGateway -> socialNetwork.userService "Маршрутизирует"
+    socialNetwork.apiGateway -> socialNetwork.postService "Маршрутизирует"
+    socialNetwork.apiGateway -> socialNetwork.statisticsService "Маршрутизирует"
+
+    socialNetwork.userService -> socialNetwork.postgresUserDb "Читает/Пишет"
+    socialNetwork.statisticsService -> socialNetwork.clickhouseStatsDb "Читает/Пишет"
+    socialNetwork.postService -> socialNetwork.postgresPostDb "Читает/Пишет"
+
+    socialNetwork.postService -> socialNetwork.kafka "Публикует"
+    socialNetwork.kafka -> socialNetwork.statisticsService "Отправляет"
+}
+
+views {
+   view index {
+        include *
+    }
+}

@@ -1,0 +1,50 @@
+#### Создать ключи
+cd user_service
+./gen_keys.sh
+
+#### Запустить сервис
+docker-compose up --build
+
+#### Удалить сервис
+docker compose down -v
+
+#### Запросы на пострелять
+curl -X GET http://localhost:5000/health
+
+curl -X POST http://localhost:5000/users/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user",
+    "password": "securePass123!",
+    "email": "test@gmail.com"
+  }'
+
+curl -X POST http://localhost:5000/users/v1/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user",
+    "password": "securePass123!"
+  }'
+
+curl -X GET http://localhost:5000/users/v1 \
+    -H "Authorization: Bearer $TOKEN" 
+
+curl -X PUT http://localhost:5000/users/v1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "John",
+    "last_name": "Doe",
+    "birth_date": "1990-01-01",
+    "phone_number": "+1234567890"
+  }'
+
+curl -X GET http://localhost:5000/users/v1 \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X GET http://localhost:5000/users/v1   -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"
+
+#### Тесты
+docker build -t user-service-tests -f user_service/tests/Dockerfile ./user_service
+
+docker run -it --rm user-service-tests
