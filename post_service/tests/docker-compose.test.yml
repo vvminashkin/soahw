@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  post-db-test:
+    image: postgres:13-alpine
+    container_name: post-db-test
+    environment:
+      POSTGRES_USER: post_service
+      POSTGRES_PASSWORD: post_password
+      POSTGRES_DB: posts_db
+    ports:
+      - "${TEST_DB_PORT:-5434}:5432"
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U post_service -d posts_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  post-service-test:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: post-service-test
+    environment:
+      DATABASE_URL: postgresql://post_service:post_password@post-db-test:5432/posts_db
+      GRPC_PORT: 50051
+    depends_on:
+      post-db-test:
+        condition: service_healthy
+    ports:
+      - "${TEST_GRPC_PORT:-50052}:50051"
+    networks:
+      - test-network
+    volumes:
+      - ../proto:/app/proto
+    command: ["python", "post_service.py"]
+
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,7 @@
+pytest
+pytest-asyncio
+grpcio
+grpcio-tools
+protobuf
+docker-compose
+psycopg2-binary

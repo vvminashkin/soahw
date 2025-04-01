@@ -20,6 +20,25 @@ services:
       timeout: 5s
       retries: 5
 
+  post-db:
+    image: postgres:13-alpine
+    container_name: post-db
+    environment:
+      POSTGRES_USER: post_service
+      POSTGRES_PASSWORD: post_password
+      POSTGRES_DB: posts_db
+    volumes:
+      - post-db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U post_service -d posts_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   user-service:
     build: ./user_service
     container_name: user-service
@@ -38,11 +57,34 @@ services:
       - ./user_service/private_key.pem:/app/private_key.pem
       - ./user_service/public_key.pem:/app/public_key.pem
 
+  post-service:
+    build: ./post_service
+    container_name: post-service
+    environment:
+      DATABASE_URL: postgresql://post_service:post_password@post-db:5432/posts_db
+      GRPC_PORT: 50051
+    depends_on:
+      post-db:
+        condition: service_healthy
+    networks:
+      - app-network
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./proto:/app/proto
+    command: ["python", "post_service.py"]
+
   api-gateway:
     build: ./gateway
     container_name: api-gateway
+    environment:
+      USER_SERVICE_URL: http://user-service:5001
+      POST_SERVICE_HOST: post-service
+      POST_SERVICE_PORT: 50051
     depends_on:
       user-service:
+        condition: service_started
+      post-service:
         condition: service_started
     networks:
       - app-network
@@ -50,10 +92,12 @@ services:
       - "5000:5000"
     volumes:
       - ./user_service/public_key.pem:/app/public_key.pem
+      - ./proto:/app/proto
     command: ["./wait-for-it.sh", "user-service:5001", "--", "python", "api_gateway.py"]
 
 volumes:
   user-db-data:
+  post-db-data:
 
 networks:
   app-network:
