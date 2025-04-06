@@ -113,6 +113,7 @@ def delete_post(post_id, user_id):
 def list_posts(page=1, page_size=10, user_id=None, include_private=False, tags=None):
     with SessionLocal() as db:
         query = db.query(Post).options(selectinload(Post.tags))
+        print(user_id, "fdafs")
         if not include_private:
             query = query.filter((Post.is_private == False) | 
                                 ((Post.is_private == True) & (Post.creator_id == user_id)))

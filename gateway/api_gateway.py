@@ -92,7 +92,7 @@ def user_profile():
 @authorize
 def create_post():
     try:
-        user_id = request.user.get('sub')
+        user_id = str(request.user.get('user_id'))
         data = request.json
         
         stub = get_post_service_stub()
@@ -125,7 +125,7 @@ def create_post():
 @authorize
 def get_post(post_id):
     try:
-        user_id = request.user.get('sub')
+        user_id = str(request.user.get('user_id'))
         
         stub = get_post_service_stub()
         post_request = post_service_pb2.GetPostRequest(
@@ -153,7 +153,7 @@ def get_post(post_id):
 @authorize
 def update_post(post_id):
     try:
-        user_id = request.user.get('sub')
+        user_id = str(request.user.get('user_id'))
         data = request.json
         
         stub = get_post_service_stub()
@@ -186,7 +186,7 @@ def update_post(post_id):
 @authorize
 def delete_post(post_id):
     try:
-        user_id = request.user.get('sub')
+        user_id = str(request.user.get('user_id'))
         
         stub = get_post_service_stub()
         post_request = post_service_pb2.DeletePostRequest(
@@ -212,7 +212,7 @@ def delete_post(post_id):
 @authorize
 def list_posts():
     try:
-        user_id = request.user.get('sub')
+        user_id = str(request.user.get('user_id'))
         
         page = int(request.args.get('page', 1))
         page_size = int(request.args.get('page_size', 10))

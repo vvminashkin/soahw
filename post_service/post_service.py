@@ -157,7 +157,7 @@ class PostServiceServicer(post_service_pb2_grpc.PostServiceServicer):
                 page=request.page,
                 page_size=request.page_size,
                 user_id=request.user_id,
-                include_private=request.include_private,
+                include_private=False,
                 tags=list(request.tags) if request.tags else None
             )
             response = post_service_pb2.ListPostsResponse(
