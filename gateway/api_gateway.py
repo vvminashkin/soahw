@@ -9,6 +9,7 @@ import json
 from google.protobuf.json_format import MessageToDict
 from datetime import datetime
 import os
+from kafka import KafkaProducer
 
 import post_service_pb2
 import post_service_pb2_grpc
@@ -17,7 +18,71 @@ USER_SERVICE_URL = "http://user-service:5001"
 POST_SERVICE_HOST = os.environ.get("POST_SERVICE_HOST", "post-service")
 POST_SERVICE_PORT = os.environ.get("POST_SERVICE_PORT", "50051")
 
-app = Flask(__name__)
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_TOPIC_REGISTRATION = "user-registration"
+KAFKA_TOPIC_LIKES = "user-likes"
+KAFKA_TOPIC_VIEWS = "user-content-views"
+KAFKA_TOPIC_COMMENTS = "user-comments"
+kafka_producer = None
+import socket
+import time
+from kafka.errors import NoBrokersAvailable
+
+def is_kafka_ready(host, port, timeout=1):
+    """Проверка доступности порта Kafka"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect((host, port))
+        s.close()
+        return True
+    except:
+        s.close()
+        return False
+
+def wait_for_kafka(app, host="kafka", port=9092, max_retries=30):
+    """Ожидание готовности Kafka"""
+    retries = 0
+    while retries < max_retries:
+        if is_kafka_ready(host, port):
+            app.logger.info(f"Kafka доступна на {host}:{port}")
+            return True
+        retries += 1
+        app.logger.warning(f"Kafka недоступна, повторная попытка {retries}/{max_retries}...")
+        time.sleep(2)
+    app.logger.error(f"Kafka не стала доступной после {max_retries} попыток")
+    return False
+
+def get_kafka_producer():
+     global kafka_producer
+     if kafka_producer is None:
+         kafka_producer = KafkaProducer(
+             bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+             value_serializer=lambda v: json.dumps(v).encode('utf-8')
+         )
+     return kafka_producer
+
+def create_app():
+    app = Flask(__name__)
+    try:
+        wait_for_kafka(app)
+        producer = get_kafka_producer()
+        if producer:
+            app.logger.info("Подключение к Kafka успешно инициализировано")
+    except Exception as e:
+        app.logger.error(f"Ошибка при инициализации Kafka: {str(e)}")
+    return app
+app = create_app()
+
+
+def send_event_to_kafka(topic, event_data):
+    try:
+        producer = get_kafka_producer()
+        producer.send(topic, event_data)
+        producer.flush()
+        app.logger.info(f"Event sent to Kafka topic {topic}: {event_data}")
+    except Exception as e:
+        app.logger.error(f"Failed to send event to Kafka: {str(e)}")
 
 def get_public_key():
     try:
@@ -75,6 +140,20 @@ def login():
 @app.route('/users/v1/register', methods=['POST'])
 def register():
     resp = requests.post(f"{USER_SERVICE_URL}/users/v1/register", json=request.json)
+
+    if resp.status_code == 201:
+        response_data = resp.json()
+        decoded = jwt.decode(response_data.get("access_token"), PUBLIC_KEY, algorithms=["RS256"])
+        user = decoded
+        event_data = {
+            "user_id": user['user_id'],
+            "registration_date": datetime.now().isoformat(),
+            "login": request.json.get('login', ''),
+            "email": request.json.get('email', '')
+        }
+ 
+        send_event_to_kafka(KAFKA_TOPIC_REGISTRATION, event_data)
+ 
     return jsonify(resp.json()), resp.status_code
 
 @app.route('/users/v1', methods=['GET', 'PUT'])
@@ -132,11 +211,18 @@ def get_post(post_id):
             post_id=post_id,
             user_id=user_id
         )
-        
+
         response = stub.GetPost(post_request)
         
         result = process_post_response(response)
-        
+
+        event_data = {
+            "user_id": user_id,
+            "post_id": post_id,
+            "view_time": datetime.now().isoformat()
+        }
+        send_event_to_kafka(KAFKA_TOPIC_VIEWS, event_data)
+
         return jsonify(result), 200
     except grpc.RpcError as e:
         status_code = {
@@ -231,8 +317,19 @@ def list_posts():
         response = stub.ListPosts(post_request)
 
         posts_json = []
+        current_time = datetime.now().isoformat()
+
         for post in response.posts:
-            posts_json.append(process_post_response(post))
+            post_dict = process_post_response(post)
+            posts_json.append(post_dict)
+ 
+            event_data = {
+                "user_id": user_id,
+                "post_id": post_dict.get('id'),
+                "view_time": current_time,
+                "view_type": "list"
+            }
+            send_event_to_kafka(KAFKA_TOPIC_VIEWS, event_data)
 
         result = {
             "posts": posts_json,
@@ -252,6 +349,77 @@ def list_posts():
             grpc.StatusCode.INTERNAL: 500
         }.get(e.code(), 500)
 
+        return jsonify({"error": e.details()}), status_code
+
+@app.route('/posts/v1/<post_id>/like', methods=['POST'])
+@authorize
+def like_post(post_id):
+    try:
+        user_id = str(request.user.get('user_id'))
+
+        stub = get_post_service_stub()
+        post_request = post_service_pb2.GetPostRequest(
+            post_id=post_id,
+            user_id=user_id
+        )
+
+        response = stub.GetPost(post_request)
+        event_data = {
+            "user_id": user_id,
+            "post_id": post_id,
+            "like_time": datetime.now().isoformat()
+        }
+        send_event_to_kafka(KAFKA_TOPIC_LIKES, event_data)
+
+        return '', 204
+    except grpc.RpcError as e:
+        status_code = {
+            grpc.StatusCode.INVALID_ARGUMENT: 400,
+            grpc.StatusCode.UNAUTHENTICATED: 401,
+            grpc.StatusCode.PERMISSION_DENIED: 403,
+            grpc.StatusCode.NOT_FOUND: 404,
+            grpc.StatusCode.INTERNAL: 500
+        }.get(e.code(), 500)
+
+        return jsonify({"error": e.details()}), status_code
+
+@app.route('/posts/v1/<post_id>/comments', methods=['POST'])
+@authorize
+def create_comment(post_id):
+    try:
+        user_id = str(request.user.get('user_id'))
+        data = request.json
+
+        stub = get_post_service_stub()
+        post_request = post_service_pb2.GetPostRequest(
+            post_id=post_id,
+            user_id=user_id
+        )
+
+        response = stub.GetPost(post_request)
+
+        from uuid import uuid4
+        comment_id = str(uuid4())
+
+        event_data = {
+            "user_id": user_id,
+            "post_id": post_id,
+            "comment_id": comment_id,
+            "comment_time": datetime.now().isoformat(),
+            "content": data.get('content', '')
+        }
+        send_event_to_kafka(KAFKA_TOPIC_COMMENTS, event_data)
+
+        return jsonify({"comment_id": comment_id}), 201
+    except grpc.RpcError as e:
+        status_code = {
+            grpc.StatusCode.INVALID_ARGUMENT: 400,
+            grpc.StatusCode.UNAUTHENTICATED: 401,
+            grpc.StatusCode.PERMISSION_DENIED: 403,
+            grpc.StatusCode.NOT_FOUND: 404,
+            grpc.StatusCode.INTERNAL: 500
+        }.get(e.code(), 500)
+        
         return jsonify({"error": e.details()}), status_code
 
 if __name__ == '__main__':
