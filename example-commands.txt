@@ -48,3 +48,101 @@ curl -X GET http://localhost:5000/users/v1   -H "Authorization: Bearer $TOKEN"  
 docker build -t user-service-tests -f user_service/tests/Dockerfile ./user_service
 
 docker run -it --rm user-service-tests
+
+
+--------------------------------------------------
+КОМАНДЫ ДЛЯ СЕРВИСА ПОСТОВ
+
+запустить тесты
+cd post_service/tests
+
+pytest -xvs ./
+curl -X POST http://localhost:5000/users/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user",
+    "password": "securePass123!",
+    "email": "test@gmail.com"
+  }'
+
+curl -X POST http://localhost:5000/users/v1/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user",
+    "password": "securePass123!"
+  }'
+  
+TOKEN=
+
+curl -X POST http://localhost:5000/posts/v1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "title": "My First Post",
+    "description": "Some test",
+    "is_private": false,
+    "tags": ["test", "api", "verification"]
+  }'
+
+ curl -X POST http://localhost:5000/posts/v1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "title": "My Private Post",
+    "description": "Private post",
+    "is_private": true,
+    "tags": ["private", "personal"]
+  }'
+
+curl -X GET http://localhost:5000/posts/v1 \
+-H "Authorization: Bearer $TOKEN"
+
+curl -X GET http://localhost:5000/posts/v1?page_size=1 -H "Authorization: Bearer $TOKEN"
+
+curl -X GET 'http://localhost:5000/posts/v1?page_size=1&page=2' -H "Authorization: Bearer $TOKEN"
+
+curl -X GET "http://localhost:5000/posts/v1?page=1&page_size=5&tags=test" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X GET http://localhost:5000/posts/v1/2 \
+-H "Authorization: Bearer $TOKEN"
+
+curl -X PUT http://localhost:5000/posts/v1/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "title": "Updated Post Title",
+    "description": "I have updated this post description",
+    "is_private": false,
+    "tags": ["test", "api", "updated"]
+  }'
+  
+curl -X GET http://localhost:5000/posts/v1/1 -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://localhost:5000/users/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user2",
+    "password": "securePass123!",
+    "email": "test2@gmail.com"
+  }'
+
+curl -X POST http://localhost:5000/users/v1/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user2",
+    "password": "securePass123!"
+  }'
+
+TOKEN2=
+
+curl -X GET http://localhost:5000/posts/v1 \
+-H "Authorization: Bearer $TOKEN2"
+
+  
+curl -X DELETE http://localhost:5000/posts/v1/2 \
+-H "Authorization: Bearer $TOKEN"
+
+curl -X GET http://localhost:5000/posts/v1/2 -H "Authorization: Bearer $TOKEN"
+
+curl -X DELETE http://localhost:5000/posts/v1/1 -H "Authorization: Bearer $TOKEN2"
