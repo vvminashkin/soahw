@@ -52,8 +52,10 @@ def register():
         email=data["email"],
         password=data["password"]
     )
-    
-    return jsonify({"message": "User registered successfully"}), 201
+
+    user = get_user_by_login(data["login"])
+    token = create_jwt_token(user)
+    return jsonify({"message": "User registered successfully", "access_token": token}), 201
 
 @app.route("/users/v1/login", methods=["POST"])
 def login():

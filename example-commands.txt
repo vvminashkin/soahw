@@ -146,3 +146,29 @@ curl -X DELETE http://localhost:5000/posts/v1/2 \
 curl -X GET http://localhost:5000/posts/v1/2 -H "Authorization: Bearer $TOKEN"
 
 curl -X DELETE http://localhost:5000/posts/v1/1 -H "Authorization: Bearer $TOKEN2"
+
+curl -X POST http://localhost:5000/posts/v1/1/like \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://localhost:5000/posts/v1/1/comments \
+  -H "Content-Type: application/json" \
+  -d '{"content":"very cool comment"}'\
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://localhost:5000/users/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "test_user2",
+    "password": "securePass123!",
+    "email": "test2@gmail.com"
+  }'
+
+curl -X POST http://localhost:5000/posts/v1/1/like \
+  -H "Authorization: Bearer $TOKEN2"
+
+curl -X POST http://localhost:5000/posts/v1/2/comments \
+  -H "Content-Type: application/json" \
+  -d '{"content":"very cool comment2"}'\
+  -H "Authorization: Bearer $TOKEN2"
+
+  pytest -xvs tests/test_api_gateway.py
