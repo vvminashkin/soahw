@@ -41,6 +41,7 @@ services:
        timeout: 10s
        retries: 10
        start_period: 15s
+  
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     depends_on:
@@ -52,7 +53,6 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-
 
   post-db:
     image: postgres:13-alpine
@@ -108,6 +108,47 @@ services:
       - ./proto:/app/proto
     command: ["python", "post_service.py"]
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    networks:
+      - app-network
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    environment:
+       CLICKHOUSE_DB: stats_db
+       CLICKHOUSE_USER: default
+       CLICKHOUSE_PASSWORD: default
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  statistics-service:
+    build: ./statistics_service
+    container_name: statistics-service
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: default
+      CLICKHOUSE_DB: stats_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      GRPC_PORT: 50052
+    depends_on:
+      - clickhouse
+      - kafka
+    networks:
+      - app-network
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./proto:/app/proto
+    command: ["python", "statistics_service.py"]
+
   api-gateway:
     build: ./gateway
     container_name: api-gateway
@@ -115,10 +156,15 @@ services:
       USER_SERVICE_URL: http://user-service:5001
       POST_SERVICE_HOST: post-service
       POST_SERVICE_PORT: 50051
+      STATS_SERVICE_HOST: statistics-service
+      STATS_SERVICE_PORT: 50052
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       user-service:
         condition: service_started
       post-service:
+        condition: service_started
+      statistics-service:
         condition: service_started
       kafka:
         condition: service_started
@@ -134,6 +180,7 @@ services:
 volumes:
   user-db-data:
   post-db-data:
+  clickhouse-data:
 networks:
   app-network:
     driver: bridge

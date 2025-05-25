@@ -5,7 +5,7 @@ psycopg2-binary
 pyjwt
 requests
 cryptography>=42.0.0
-grpcio==1.54.0
-grpcio-tools==1.54.0
-protobuf==4.22.3
+grpcio
+grpcio-tools
+protobuf
 kafka-python==2.0.2
