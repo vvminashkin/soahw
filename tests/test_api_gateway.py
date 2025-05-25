@@ -256,3 +256,239 @@ def test_comment_post(api_url, auth_headers):
     )
     assert comment_response.status_code == 201
     assert "comment_id" in comment_response.json()
+
+
+import time
+
+
+def test_post_stats(api_url, auth_headers):
+    post_data = {
+        "title": f"Stats Test Post {uuid.uuid4().hex[:8]}",
+        "description": "This post will be used for testing statistics",
+        "is_private": False,
+        "tags": ["test", "stats"],
+    }
+
+    create_response = requests.post(
+        f"{api_url}/posts/v1", json=post_data, headers=auth_headers
+    )
+    assert create_response.status_code == 201
+    post_id = create_response.json().get("id")
+
+    for _ in range(3):
+        get_response = requests.get(
+            f"{api_url}/posts/v1/{post_id}", headers=auth_headers
+        )
+        assert get_response.status_code == 200
+        time.sleep(0.5)
+
+    like_response = requests.post(
+        f"{api_url}/posts/v1/{post_id}/like", headers=auth_headers
+    )
+    assert like_response.status_code == 204
+
+    comment_data = {"content": "Test comment for statistics"}
+    comment_response = requests.post(
+        f"{api_url}/posts/v1/{post_id}/comments",
+        json=comment_data,
+        headers=auth_headers,
+    )
+    assert comment_response.status_code == 201
+
+    time.sleep(3)
+
+    stats_response = requests.get(
+        f"{api_url}/stats/v1/posts/{post_id}", headers=auth_headers
+    )
+    assert stats_response.status_code == 200
+
+    stats_data = stats_response.json()
+    assert "views_count" in stats_data
+    assert "likes_count" in stats_data
+    assert "comments_count" in stats_data
+
+    assert stats_data["views_count"] >= 3
+    assert stats_data["likes_count"] >= 1
+    assert stats_data["comments_count"] >= 1
+
+
+def test_post_views_dynamics(api_url, auth_headers):
+    post_data = {
+        "title": f"Views Dynamics Test Post {uuid.uuid4().hex[:8]}",
+        "description": "This post will be used for testing views dynamics",
+        "is_private": False,
+        "tags": ["test", "dynamics"],
+    }
+
+    create_response = requests.post(
+        f"{api_url}/posts/v1", json=post_data, headers=auth_headers
+    )
+    assert create_response.status_code == 201
+    post_id = create_response.json().get("id")
+
+    for _ in range(5):
+        requests.get(f"{api_url}/posts/v1/{post_id}", headers=auth_headers)
+        time.sleep(0.2)
+
+    time.sleep(3)
+
+    from datetime import datetime, timedelta
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    views_dynamics_response = requests.get(
+        f"{api_url}/stats/v1/posts/{post_id}/views/dynamics?start_date={week_ago}&end_date={today}",
+        headers=auth_headers,
+    )
+    assert views_dynamics_response.status_code == 200
+
+    dynamics_data = views_dynamics_response.json()
+    assert "daily_stats" in dynamics_data
+    assert isinstance(dynamics_data["daily_stats"], list)
+
+    today_stats = [day for day in dynamics_data["daily_stats"] if day["date"] == today]
+    assert len(today_stats) == 1
+    assert today_stats[0]["count"] >= 5
+
+
+def test_post_likes_dynamics(api_url, auth_headers):
+    post_data = {
+        "title": f"Likes Dynamics Test Post {uuid.uuid4().hex[:8]}",
+        "description": "This post will be used for testing likes dynamics",
+        "is_private": False,
+        "tags": ["test", "likes", "dynamics"],
+    }
+
+    create_response = requests.post(
+        f"{api_url}/posts/v1", json=post_data, headers=auth_headers
+    )
+    assert create_response.status_code == 201
+    post_id = create_response.json().get("id")
+
+    like_response = requests.post(
+        f"{api_url}/posts/v1/{post_id}/like", headers=auth_headers
+    )
+    assert like_response.status_code == 204
+
+    time.sleep(3)
+
+    from datetime import datetime, timedelta
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    likes_dynamics_response = requests.get(
+        f"{api_url}/stats/v1/posts/{post_id}/likes/dynamics?start_date={week_ago}&end_date={today}",
+        headers=auth_headers,
+    )
+    assert likes_dynamics_response.status_code == 200
+
+    dynamics_data = likes_dynamics_response.json()
+    assert "daily_stats" in dynamics_data
+
+    today_stats = [day for day in dynamics_data["daily_stats"] if day["date"] == today]
+    assert len(today_stats) <= 1
+    if today_stats:
+        assert today_stats[0]["count"] >= 1
+
+
+def test_top_posts(api_url, auth_headers):
+    posts = []
+
+    for i in range(3):
+        post_data = {
+            "title": f"Top Posts Test {i} {uuid.uuid4().hex[:8]}",
+            "description": f"Post {i} for testing top posts",
+            "is_private": False,
+            "tags": ["test", "top"],
+        }
+
+        create_response = requests.post(
+            f"{api_url}/posts/v1", json=post_data, headers=auth_headers
+        )
+        assert create_response.status_code == 201
+        post_id = create_response.json().get("id")
+        posts.append(post_id)
+
+    for i, post_id in enumerate(posts):
+        for _ in range((i + 1) * 2):
+            requests.get(f"{api_url}/posts/v1/{post_id}", headers=auth_headers)
+            time.sleep(0.1)
+
+    time.sleep(3)
+
+    top_posts_response = requests.get(
+        f"{api_url}/stats/v1/posts/top?metric_type=VIEWS&limit=5", headers=auth_headers
+    )
+    assert top_posts_response.status_code == 200
+
+    top_data = top_posts_response.json()
+    assert "posts" in top_data
+    assert isinstance(top_data["posts"], list)
+
+    post_ids_in_top = [post["post_id"] for post in top_data["posts"]]
+
+    assert any(str(post_id) in map(str, post_ids_in_top) for post_id in posts)
+
+
+def test_top_users(api_url, auth_headers):
+    post_data = {
+        "title": f"Top Users Test Post {uuid.uuid4().hex[:8]}",
+        "description": "This post will be used for testing top users",
+        "is_private": False,
+        "tags": ["test", "top", "users"],
+    }
+
+    create_response = requests.post(
+        f"{api_url}/posts/v1", json=post_data, headers=auth_headers
+    )
+    assert create_response.status_code == 201
+    post_id = create_response.json().get("id")
+
+    for _ in range(3):
+        requests.get(f"{api_url}/posts/v1/{post_id}", headers=auth_headers)
+        time.sleep(0.1)
+
+    requests.post(f"{api_url}/posts/v1/{post_id}/like", headers=auth_headers)
+
+    comment_data = {"content": "Test comment for top users"}
+    requests.post(
+        f"{api_url}/posts/v1/{post_id}/comments",
+        json=comment_data,
+        headers=auth_headers,
+    )
+
+    time.sleep(3)
+
+    top_users_views_response = requests.get(
+        f"{api_url}/stats/v1/users/top?metric_type=VIEWS", headers=auth_headers
+    )
+    assert top_users_views_response.status_code == 200
+
+    top_users_likes_response = requests.get(
+        f"{api_url}/stats/v1/users/top?metric_type=LIKES", headers=auth_headers
+    )
+    assert top_users_likes_response.status_code == 200
+
+    top_users_comments_response = requests.get(
+        f"{api_url}/stats/v1/users/top?metric_type=COMMENTS", headers=auth_headers
+    )
+    assert top_users_comments_response.status_code == 200
+
+    for response in [
+        top_users_views_response,
+        top_users_likes_response,
+        top_users_comments_response,
+    ]:
+        data = response.json()
+        assert "users" in data
+        assert isinstance(data["users"], list)
+
+
+def test_invalid_metric_type(api_url, auth_headers):
+    invalid_response = requests.get(
+        f"{api_url}/stats/v1/posts/top?metric_type=INVALID", headers=auth_headers
+    )
+    assert invalid_response.status_code == 400
+    assert "error" in invalid_response.json()
